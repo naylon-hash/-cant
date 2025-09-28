@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+// src/app/api/wall/route.ts
+import { NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 type Post = {
   id: string;
@@ -12,83 +13,63 @@ type Post = {
   score: number;
 };
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const sort = searchParams.get("sort") === "new" ? "new" : "top";
-  const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10) || 50, 100);
-  const key = sort === "top" ? "cant:score" : "cant:idx:new";
+const Z_NEW = "cant:post:new";
+const Z_TOP = "cant:post:top";
+const H_PREFIX = "cant:post:";
 
-  const ids = (await kv.zrange(key, 0, limit - 1, { rev: true })) as string[];
-  if (!ids.length) {
-    return NextResponse.json({ posts: [] }, { headers: { "Cache-Control": "no-store" } });
+function isPost(x: any): x is Post {
+  return (
+    x &&
+    typeof x.id === "string" &&
+    typeof x.cant === "string" &&
+    typeof x.can === "string" &&
+    typeof x.at === "number" &&
+    typeof x.score === "number"
+  );
+}
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const sort = searchParams.get("sort") === "new" ? "new" : "top";
+    const limitRaw = parseInt(searchParams.get("limit") || "50", 10);
+    const limit = Math.min(Math.max(isFinite(limitRaw) ? limitRaw : 50, 1), 100);
+
+    const zkey = sort === "new" ? Z_NEW : Z_TOP;
+    const ids = await kv.zrange<string>(zkey, 0, limit - 1, { rev: true });
+    const rows = await Promise.all(ids.map((id) => kv.hgetall<Post>(H_PREFIX + id)));
+    const posts = rows.filter(isPost);
+
+    return NextResponse.json({ posts }, { headers: { "cache-control": "no-store" } });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "KV unavailable" }, { status: 503 });
   }
-
-  // Fetch post blobs in a pipeline (results are the values themselves)
-  const pipe = kv.pipeline();
-  for (const id of ids) pipe.get(`cant:post:${id}`);
-  const results = (await pipe.exec()) as Array<string | Record<string, unknown> | null>;
-
-  const posts: Post[] = results
-    .map((val) => {
-      if (!val) return null;
-      try {
-        const parsed = typeof val === "string" ? JSON.parse(val) : val;
-        return parsed as Post;
-      } catch {
-        return null;
-      }
-    })
-    .filter((p): p is Post => !!p);
-
-  return NextResponse.json({ posts }, { headers: { "Cache-Control": "no-store" } });
 }
 
-function ipFrom(req: NextRequest) {
-  const xf = req.headers.get("x-forwarded-for") || "";
-  return xf.split(",")[0]?.trim() || "0.0.0.0";
-}
-
-export async function POST(req: NextRequest) {
-  const ip = ipFrom(req);
-  // naive rate-limit: 8 posts / 60s per IP
+export async function POST(req: Request) {
   try {
-    const rlKey = `cant:rl:post:${ip}`;
-    const n = (await kv.incr(rlKey)) || 0;
-    if (n === 1) await kv.expire(rlKey, 60);
-    if (n > 8) return NextResponse.json({ error: "slow down" }, { status: 429 });
-  } catch {}
+    const body = await req.json();
+    const cant = String(body?.cant ?? "").trim();
+    const can = String(body?.can ?? "").trim();
+    const handle = body?.handle ? String(body.handle).trim() : undefined;
 
-  const body = await req.json().catch(() => ({}));
-  const cant = (body?.cant || "").toString().slice(0, 800);
-  const can = (body?.can || "").toString().slice(0, 800);
-  const handle = (body?.handle || "").toString().slice(0, 32);
-  if (!cant || !can) return NextResponse.json({ error: "cant and can required" }, { status: 400 });
-
-  const id = crypto.randomUUID();
-  const at = Date.now();
-  const post: Post = { id, cant, can, handle: handle || undefined, at, score: 0 };
-
-  await kv.set(`cant:post:${id}`, JSON.stringify(post));
-  await kv.zadd("cant:idx:new", { score: at, member: id });
-  await kv.zadd("cant:score", { score: 0, member: id });
-
-  // soft-trim to keep things tidy
-  try {
-    const count = await kv.zcard("cant:idx:new");
-    if (count && count > 1200) {
-      const excess = count - 1000;
-      const oldIds = await kv.zrange("cant:idx:new", 0, excess - 1);
-      if (oldIds.length) {
-        const p = kv.pipeline();
-        for (const oid of oldIds) {
-          p.del(`cant:post:${oid}`);
-          p.zrem("cant:idx:new", oid);
-          p.zrem("cant:score", oid);
-        }
-        await p.exec();
-      }
+    if (!cant || !can) {
+      return NextResponse.json({ error: "cant + can required" }, { status: 400 });
     }
-  } catch {}
 
-  return NextResponse.json({ post }, { headers: { "Cache-Control": "no-store" } });
+    const id =
+      typeof crypto !== "undefined" && (crypto as any).randomUUID
+        ? (crypto as any).randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    const post: Post = { id, cant, can, handle, at: Date.now(), score: 0 };
+
+    await kv.hset(H_PREFIX + id, post);
+    await kv.zadd(Z_NEW, { score: post.at, member: id });
+    await kv.zadd(Z_TOP, { score: post.score, member: id });
+
+    return NextResponse.json({ ok: true, post }, { status: 201 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "KV error" }, { status: 503 });
+  }
 }
