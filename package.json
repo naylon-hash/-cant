@@ -8,17 +8,15 @@
     "start": "next start",
     "lint": "next lint || echo \"skip\""
   },
-  "engines": {
-    "node": ">=18.18.0"
-  },
+  "engines": { "node": ">=18.18.0" },
   "dependencies": {
-    "@tailwindcss/postcss": "^8.0.0",
     "@vercel/kv": "^1.0.0",
-    "lucide-react": "^0.460.0",
+    "@tailwindcss/postcss": "latest",
+    "tailwindcss": "latest",
+    "lucide-react": "latest",
     "next": "15.5.4",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "tailwindcss": "4.0.0"
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
   },
   "devDependencies": {
     "postcss": "^8.4.41",
