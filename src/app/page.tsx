@@ -63,7 +63,7 @@ const isDev = (() => {
   } catch {}
   try {
     if (typeof window !== "undefined") {
-      if (/^(localhost|127\\.0\\.0\\.1)$/i.test(window.location.hostname)) return true;
+      if (/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)) return true;
       // manual flag via localStorage
       if (window.localStorage.getItem("CANT_DEV") === "1") return true;
     }
@@ -162,7 +162,7 @@ const generatedPhrases: string[] = (() => {
 const degenTemplates: ((cant: string) => string)[] = [
   // Adaptive templates that react to user's text
   (cant: string) =>
-    `CAN: ${cant ? cant.replace(/I can’t|I can't|I cannot/gi, "You can").replace(/\\.$/, "") : "You can."} — set slippage to bravery, size to conviction, and press buy.`,
+    `CAN: ${cant ? cant.replace(/I can’t|I can't|I cannot/gi, "You can").replace(/\.$/, "") : "You can."} — set slippage to bravery, size to conviction, and press buy.`,
   (cant: string) =>
     `CAN: ${cant ? cant.replace(/I can’t|I can't|I cannot/gi, "You can") : "You can"}. Touch grass, hydrate, and send.`,
   (cant: string) =>
@@ -171,7 +171,7 @@ const degenTemplates: ((cant: string) => string)[] = [
   ...generatedPhrases.map((line) => () => line),
 ];
 
-export function roastCant(cantLine: string, spice = 2) {
+function roastCant(cantLine: string, spice = 2) {
   const t = degenTemplates[Math.floor(Math.random() * degenTemplates.length)];
   let base = t(cantLine || "");
   if (spice >= 2) base += " #ICant #WeCant #UCant";
@@ -196,7 +196,7 @@ function useSiteUrl() {
 function normalizeHandle(h: string) {
   const t = (h || "").trim();
   if (!t) return "";
-  const stripped = t.replace(/^@+/, "").replace(/\\s+/g, "");
+  const stripped = t.replace(/^@+/, "").replace(/\s+/g, "");
   return stripped ? `@${stripped}` : "";
 }
 
@@ -210,7 +210,7 @@ function safeOpen(url: string) {
   }
 }
 
-export function buildTweet({
+function buildTweet({
   cant,
   canLine,
   siteUrl,
@@ -223,13 +223,13 @@ export function buildTweet({
   handle?: string;
   communityUrl?: string;
 }) {
-  // Join parts with explicit "\\n" to avoid multiline-string syntax errors
+  // Join parts with explicit "\n" to avoid multiline-string syntax errors
   const parts: string[] = [cant, canLine, "$CANT"]; // always include ticker
   const h = normalizeHandle(handle || "");
   if (h) parts.push(h);
   if (siteUrl) parts.push(siteUrl);
   if (communityUrl) parts.push(communityUrl);
-  return parts.join("\\n").trim();
+  return parts.join("\n").trim();
 }
 
 // ---------------- PAGE ----------------
@@ -377,12 +377,12 @@ export default function CantPage() {
       const t3 = buildTweet({ cant: "A", canLine: "B", siteUrl: "", handle: "mike" });
       const t4 = buildTweet({ cant: "A", canLine: "B", siteUrl: "", handle: "@mike " });
       const t5 = buildTweet({ cant: "A", canLine: "B", siteUrl: "", handle: "", communityUrl: COMMUNITY_URL });
-      if (!t1.includes("\\n")) console.warn("[test] buildTweet should include a newline");
+      if (!t1.includes("\n")) console.warn("[test] buildTweet should include a newline");
       if (!t2.endsWith("https://x.y")) console.warn("[test] buildTweet should include siteUrl when provided");
       if (!t3.endsWith("@mike")) console.warn("[test] buildTweet should append normalized handle");
       if (!t4.endsWith("@mike")) console.warn("[test] buildTweet should normalize @handle input");
       if (!t5.includes(COMMUNITY_URL)) console.warn("[test] buildTweet should include community url when provided");
-      const lines = t1.split("\\n");
+      const lines = t1.split("\n");
       if (lines.length < 3) console.warn("[test] buildTweet should produce 3+ lines when siteUrl/handle empty");
 
       // roastCant tests
@@ -477,7 +477,7 @@ export default function CantPage() {
 
           <Frame title="$CANT — preview">
             <Screen>
-              {`$CANT> ${cant}${submitted ? `\\n\\n$CANT_AI> ${canLine}` : ""}`}
+              {`$CANT> ${cant}${submitted ? `\n\n$CANT_AI> ${canLine}` : ""}`}
             </Screen>
           </Frame>
 
@@ -521,7 +521,7 @@ export default function CantPage() {
               <Card key={item.id} className="bg-neutral-950 border-neutral-800">
                 <CardContent className="pt-6 space-y-3">
                   <Screen>
-                    {`$CANT> ${item.cant}\\n\\n$CANT_AI> ${item.can}`}
+                    {`$CANT> ${item.cant}\n\n$CANT_AI> ${item.can}`}
                   </Screen>
                   <div className="flex items-center justify-between text-xs text-neutral-400">
                     <span>{item.handle ? `by ${item.handle}` : "anon"}</span>
