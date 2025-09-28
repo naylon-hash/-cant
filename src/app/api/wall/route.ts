@@ -17,15 +17,20 @@ const Z_NEW = "cant:post:new";
 const Z_TOP = "cant:post:top";
 const H_PREFIX = "cant:post:";
 
-function isPost(x: any): x is Post {
-  return (
-    x &&
-    typeof x.id === "string" &&
-    typeof x.cant === "string" &&
-    typeof x.can === "string" &&
-    typeof x.at === "number" &&
-    typeof x.score === "number"
-  );
+function coercePost(row: any): Post | null {
+  if (!row) return null;
+  const p = row as Record<string, any>;
+  if (typeof p.id !== "string" || typeof p.cant !== "string" || typeof p.can !== "string") return null;
+  const at = Number(p.at);
+  const score = Number(p.score);
+  return {
+    id: p.id,
+    cant: p.cant,
+    can: p.can,
+    handle: typeof p.handle === "string" ? p.handle : undefined,
+    at: Number.isFinite(at) ? at : Date.now(),
+    score: Number.isFinite(score) ? score : 0,
+  };
 }
 
 export async function GET(req: Request) {
@@ -33,12 +38,16 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const sort = searchParams.get("sort") === "new" ? "new" : "top";
     const limitRaw = parseInt(searchParams.get("limit") || "50", 10);
-    const limit = Math.min(Math.max(isFinite(limitRaw) ? limitRaw : 50, 1), 100);
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 100);
 
-    const zkey = sort === "new" ? Z_NEW : Z_TOP;
-    const ids = await kv.zrange<string>(zkey, 0, limit - 1, { rev: true });
-    const rows = await Promise.all(ids.map((id) => kv.hgetall<Post>(H_PREFIX + id)));
-    const posts = rows.filter(isPost);
+    const key = sort === "new" ? Z_NEW : Z_TOP;
+
+    // NOTE: no generic here; cast result to string[]
+    const rawIds = await kv.zrange(key, 0, limit - 1, { rev: true });
+    const ids = (rawIds as any[]).map(String);
+
+    const rows = await Promise.all(ids.map((id) => kv.hgetall(H_PREFIX + id)));
+    const posts = rows.map(coercePost).filter(Boolean) as Post[];
 
     return NextResponse.json({ posts }, { headers: { "cache-control": "no-store" } });
   } catch (e: any) {
@@ -64,7 +73,7 @@ export async function POST(req: Request) {
 
     const post: Post = { id, cant, can, handle, at: Date.now(), score: 0 };
 
-    await kv.hset(H_PREFIX + id, post);
+    await kv.hset(H_PREFIX + id, post as any);
     await kv.zadd(Z_NEW, { score: post.at, member: id });
     await kv.zadd(Z_TOP, { score: post.score, member: id });
 
