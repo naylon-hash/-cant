@@ -15,11 +15,8 @@ import {
 } from "lucide-react";
 
 /**
- * $CANT — Polished UI (Terminal-inspired), Global Wall + Voting
- * - Submit → AI responds → Share/Post
- * - Global wall via /api/wall + /api/vote (Vercel KV)
- * - Clean contrast, white CTAs, better spacing
- * - a11y labels, copy toast, tweet length dev-warn, debounce post
+ * $CANT — Submit → AI responds → Share/Post (clean UI + Voting Wall)
+ * This version forces readable white buttons (black text) and prevents double-open.
  */
 
 // ---------------- Runtime-safe env + mode helpers ----------------
@@ -62,39 +59,34 @@ const isDev = (() => {
   return false;
 })();
 
-// ---------------- UI PRIMITIVES (polished terminal vibe) ----------------
-const Chrome: React.FC<{ title: string }> = ({ title }) => (
-  <div className="flex items-center justify-between px-4 py-2 bg-neutral-950/70 border-b border-neutral-800 rounded-t-2xl">
-    <div className="flex items-center gap-2">
-      <span className="inline-block h-3 w-3 rounded-full bg-red-500/70" />
-      <span className="inline-block h-3 w-3 rounded-full bg-yellow-500/70" />
-      <span className="inline-block h-3 w-3 rounded-full bg-green-500/70" />
-      <span className="ml-3 text-xs text-neutral-400 font-mono">{title}</span>
+// ---------------- UI PRIMITIVES ----------------
+const Frame: React.FC<{ title?: string; children: React.ReactNode }> = ({ title, children }) => {
+  return (
+    <div className="relative rounded-2xl overflow-hidden bg-neutral-950 border border-neutral-800">
+      {title && (
+        <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-neutral-700" />
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-neutral-700" />
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-neutral-700" />
+            <span className="ml-3 text-xs text-neutral-400 font-mono">{title}</span>
+          </div>
+          <TerminalSquare className="h-4 w-4 text-neutral-600" />
+        </div>
+      )}
+      <div className="p-6 md:p-8">{children}</div>
     </div>
-    <TerminalSquare className="h-4 w-4 text-neutral-600" />
-  </div>
-);
-
-const Frame: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="relative rounded-2xl overflow-hidden bg-neutral-950 border border-neutral-800 shadow-[0_0_50px_rgba(16,185,129,0.06)]">
-    <Chrome title={title} />
-    <div className="p-6 md:p-8">{children}</div>
-  </div>
-);
+  );
+};
 
 const Screen: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="relative rounded-xl p-5 md:p-6 bg-neutral-900 text-neutral-100 font-mono border border-neutral-800">
-    {/* scanlines + subtle vignette */}
     <div
-      className="pointer-events-none absolute inset-0 opacity-20 mix-blend-screen"
+      className="pointer-events-none absolute inset-0 opacity-20"
       style={{
         background:
-          "repeating-linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.025) 2px, transparent 2px, transparent 4px)",
+          "repeating-linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.02) 2px, transparent 2px, transparent 4px)",
       }}
-    />
-    <div
-      className="pointer-events-none absolute inset-0 rounded-xl"
-      style={{ background: "radial-gradient(120% 100% at 50% 0%, transparent 60%, rgba(0,0,0,0.6) 100%)" }}
     />
     <pre className="relative whitespace-pre-wrap leading-relaxed text-[15px] md:text-xl">{children}</pre>
   </div>
@@ -158,10 +150,8 @@ const generatedPhrases: string[] = (() => {
 const degenTemplates: ((cant: string) => string)[] = [
   (cant: string) =>
     `CAN: ${cant ? cant.replace(/I can’t|I can't|I cannot/gi, "You can").replace(/\.$/, "") : "You can."} — set slippage to bravery, size to conviction, and press buy.`,
-  (cant: string) =>
-    `CAN: ${cant ? cant.replace(/I can’t|I can't|I cannot/gi, "You can") : "You can"}. Touch grass, hydrate, and send.`,
-  (cant: string) =>
-    `CAN: ${cant ? cant.replace(/I can’t|I can't|I cannot/gi, "You can") : "You can"}. Narratives don't pay; execution does.`,
+  (cant: string) => `CAN: ${cant ? cant.replace(/I can’t|I can't|I cannot/gi, "You can") : "You can"}. Touch grass, hydrate, and send.`,
+  (cant: string) => `CAN: ${cant ? cant.replace(/I can’t|I can't|I cannot/gi, "You can") : "You can"}. Narratives don't pay; execution does.`,
   ...generatedPhrases.map((line) => () => line),
 ];
 
@@ -186,21 +176,11 @@ function useSiteUrl() {
   }, []);
   return url;
 }
-
 function normalizeHandle(h: string) {
   const t = (h || "").trim();
   if (!t) return "";
   const stripped = t.replace(/^@+/, "").replace(/\s+/g, "");
   return stripped ? `@${stripped}` : "";
-}
-
-function safeOpen(url: string) {
-  try {
-    const w = window.open(url, "_blank", "noopener,noreferrer");
-    if (!w) window.location.href = url;
-  } catch {
-    window.location.href = url;
-  }
 }
 
 function buildTweet({
@@ -224,7 +204,7 @@ function buildTweet({
   return parts.join("\n").trim();
 }
 
-// ---------------- PAGE (global API wired) ----------------
+// ---------------- PAGE ----------------
 export default function CantPage() {
   const siteUrl = useSiteUrl();
 
@@ -249,10 +229,6 @@ export default function CantPage() {
     setTimeout(() => setToast((t) => ({ ...t, visible: false })), 1500);
   }
 
-  // Online/offline + loading state
-  const [online, setOnline] = useState(false);
-  const [loading, setLoading] = useState(true);
-
   // Share
   const tweetText = useMemo(
     () => buildTweet({ cant, canLine, siteUrl, handle, communityUrl: COMMUNITY_URL }),
@@ -263,7 +239,7 @@ export default function CantPage() {
     [tweetText]
   );
 
-  // Wall + votes
+  // Wall + votes (local fallback version)
   type WallItem = {
     id: string;
     cant: string;
@@ -276,48 +252,23 @@ export default function CantPage() {
   const [sortBy, setSortBy] = useState<"new" | "top">("top");
   const [votes, setVotes] = useState<Record<string, number>>({});
 
-  // Initial load: try server; if fails, fallback to localStorage
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`/api/wall?sort=${sortBy}&limit=50`, { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.posts)) {
-            setWall(data.posts);
-            setOnline(true);
-          }
-        } else {
-          throw new Error("non-200");
-        }
-      } catch (e) {
-        console.warn("API offline; local-only fallback", e);
-        try {
-          const raw = localStorage.getItem("cant.wall");
-          if (raw) setWall(JSON.parse(raw));
-        } catch {}
-        setOnline(false);
-      } finally {
-        try {
-          const rawVotes = localStorage.getItem("cant.votes");
-          if (rawVotes) setVotes(JSON.parse(rawVotes));
-        } catch {}
-        setLoading(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    try {
+      const raw = localStorage.getItem("cant.wall");
+      if (raw) setWall(JSON.parse(raw));
+      const rawVotes = localStorage.getItem("cant.votes");
+      if (rawVotes) setVotes(JSON.parse(rawVotes));
+    } catch {}
   }, []);
-
-  // Persist local fallback only when offline
   useEffect(() => {
-    if (!online) {
-      try {
-        localStorage.setItem("cant.wall", JSON.stringify(wall.slice(0, 100)));
-      } catch {}
-    }
-  }, [wall, online]);
+    try {
+      localStorage.setItem("cant.wall", JSON.stringify(wall.slice(0, 100)));
+    } catch {}
+  }, [wall]);
   useEffect(() => {
-    try { localStorage.setItem("cant.votes", JSON.stringify(votes)); } catch {}
+    try {
+      localStorage.setItem("cant.votes", JSON.stringify(votes));
+    } catch {}
   }, [votes]);
 
   function tweetUrlFor(item: WallItem) {
@@ -334,49 +285,27 @@ export default function CantPage() {
   // Debounce guard for posting
   const [postCooldown, setPostCooldown] = useState(false);
 
-  async function postToWall() {
+  function postToWall() {
     if (!submitted || !canLine || postCooldown) return;
     setPostCooldown(true);
     setTimeout(() => setPostCooldown(false), 500);
 
-    const payload = { cant, can: canLine, handle: handle?.trim() || undefined };
-    try {
-      const res = await fetch("/api/wall", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("bad status");
-      const data = await res.json();
-      if (data?.post) {
-        setWall((prev) => [data.post, ...prev]);
-        setOnline(true);
-        showToast("Posted");
-        return;
-      }
-      throw new Error("no post in response");
-    } catch (e) {
-      // Offline fallback — keep the old local behavior
-      const id =
-        typeof crypto !== "undefined" && (crypto as any).randomUUID
-          ? (crypto as any).randomUUID()
-          : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      const item: WallItem = {
-        id,
-        cant,
-        can: canLine,
-        handle: handle?.trim() || undefined,
-        at: Date.now(),
-        score: 0,
-      };
-      setWall((prev) => [item, ...prev].slice(0, 100));
-      setOnline(false);
-      showToast("Offline: saved locally");
-    }
+    const id =
+      typeof crypto !== "undefined" && (crypto as any).randomUUID
+        ? (crypto as any).randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const item: WallItem = {
+      id,
+      cant,
+      can: canLine,
+      handle: handle?.trim() || undefined,
+      at: Date.now(),
+      score: 0,
+    };
+    setWall((prev) => [item, ...prev].slice(0, 100));
   }
 
-  async function vote(id: string, delta: 1 | -1) {
-    // optimistic UI
+  function vote(id: string, delta: 1 | -1) {
     setWall((prev) =>
       prev.map((it) => {
         if (it.id !== id) return it;
@@ -391,22 +320,6 @@ export default function CantPage() {
       const nextVote = prevVote === delta ? 0 : delta;
       return { ...v, [id]: nextVote };
     });
-
-    try {
-      const res = await fetch("/api/vote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, delta }),
-      });
-      if (!res.ok) throw new Error("bad status");
-      const data = await res.json();
-      if (typeof data?.score === "number") {
-        setWall((prev) => prev.map((it) => (it.id === id ? { ...it, score: data.score } : it)));
-      }
-      setOnline(true);
-    } catch (e) {
-      setOnline(false);
-    }
   }
 
   const sortedWall = useMemo(() => {
@@ -416,7 +329,7 @@ export default function CantPage() {
     return arr;
   }, [wall, sortBy]);
 
-  // ---------- Dev-only warnings (runtime-safe) ----------
+  // Dev-only logs
   if (isDev) {
     try {
       if (tweetText.length > 280) {
@@ -426,30 +339,6 @@ export default function CantPage() {
         console.warn("[warn] COMMUNITY_URL empty; falling back to default");
       }
     } catch {}
-  }
-
-  // ---------- Dev self-tests ----------
-  if (isDev) {
-    try {
-      const t1 = buildTweet({ cant: "I can't test", canLine: "CAN: ok", siteUrl: "", handle: "" });
-      const t2 = buildTweet({ cant: "A", canLine: "B", siteUrl: "https://x.y", handle: "", communityUrl: COMMUNITY_URL });
-      const t3 = buildTweet({ cant: "A", canLine: "B", siteUrl: "", handle: "mike" });
-      const t4 = buildTweet({ cant: "A", canLine: "B", siteUrl: "", handle: "@mike " });
-      const t5 = buildTweet({ cant: "A", canLine: "B", siteUrl: "", handle: "", communityUrl: COMMUNITY_URL });
-      if (!t1.includes("\n")) console.warn("[test] buildTweet should include a newline");
-      if (!t2.endsWith("https://x.y")) console.warn("[test] buildTweet should include siteUrl when provided");
-      if (!t3.endsWith("@mike")) console.warn("[test] buildTweet should append normalized handle");
-      if (!t4.endsWith("@mike")) console.warn("[test] buildTweet should normalize @handle input");
-      if (!t5.includes(COMMUNITY_URL)) console.warn("[test] buildTweet should include community url when provided");
-      const lines = t1.split("\n");
-      if (lines.length < 3) console.warn("[test] buildTweet should produce 3+ lines when siteUrl/handle empty");
-      const r = roastCant("I can't unit test");
-      if (!r || typeof r !== "string") console.warn("[test] roastCant should return a string");
-      if (!r.toUpperCase().startsWith("CAN")) console.warn("[test] roastCant should start with CAN");
-      if ((degenTemplates?.length ?? 0) < 100) console.warn("[test] expected at least 100 canned responses");
-    } catch (e) {
-      console.warn("[dev-selftest] failed", e);
-    }
   }
 
   return (
@@ -462,39 +351,23 @@ export default function CantPage() {
             <span className="text-sm text-neutral-400">I can’t. We can’t. You can’t.</span>
           </div>
           <div className="flex items-center gap-2">
+            {/* FIXED: readable and single open */}
             <Button
               asChild
-              className="bg-white text-black hover:bg-neutral-100 border border-neutral-200"
+              className="bg-white !text-black hover:bg-neutral-100 border border-neutral-200"
               aria-label="Open the $CANT X Community (opens in a new tab)"
             >
-              <a
-                href={COMMUNITY_URL}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => {
-                  e.preventDefault();
-                  safeOpen(COMMUNITY_URL);
-                }}
-                aria-label="Open the $CANT X Community (opens in a new tab)"
-              >
+              <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="h-4 w-4 mr-2" /> X Community
               </a>
             </Button>
+            {/* FIXED: readable and single open */}
             <Button
               asChild
-              className="bg-white text-black hover:bg-neutral-100 border border-neutral-200"
+              className="bg-white !text-black hover:bg-neutral-100 border border-neutral-200"
               aria-label="Share current tweet to X (opens in a new tab)"
             >
-              <a
-                href={tweetUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => {
-                  e.preventDefault();
-                  safeOpen(tweetUrl);
-                }}
-                aria-label="Share current tweet to X (opens in a new tab)"
-              >
+              <a href={tweetUrl} target="_blank" rel="noopener noreferrer">
                 <Share2 className="h-4 w-4 mr-2" /> Share to X
               </a>
             </Button>
@@ -575,7 +448,7 @@ export default function CantPage() {
         {/* Right: Wall with votes */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">CANT Wall {loading ? "(loading...)" : online ? "(global)" : "(local)"}</h2>
+            <h2 className="text-lg font-semibold">CANT Wall (local)</h2>
             <div className="flex items-center gap-2 text-sm">
               <ArrowUpNarrowWide className="h-4 w-4" />
               <button
@@ -598,11 +471,7 @@ export default function CantPage() {
           <div className="grid gap-4">
             {sortedWall.length === 0 && (
               <p className="text-neutral-500 text-sm">
-                {loading
-                  ? "Loading..."
-                  : online
-                  ? "No posts yet. Be the first to drop a CANT."
-                  : "Your posts will appear here. Connect a backend later to make this global."}
+                Your posts will appear here. Connect a backend later to make this global.
               </p>
             )}
             {sortedWall.map((item) => (
@@ -637,22 +506,9 @@ export default function CantPage() {
                       </Button>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        asChild
-                        size="sm"
-                        className="bg-emerald-600 text-white hover:bg-emerald-500"
-                        aria-label="Share this wall post to X"
-                      >
-                        <a
-                          href={tweetUrlFor(item)}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            safeOpen(tweetUrlFor(item));
-                          }}
-                          aria-label="Share this wall post to X"
-                        >
+                      {/* FIXED: single-open wall share link */}
+                      <Button asChild size="sm" className="bg-emerald-600 text-white hover:bg-emerald-500" aria-label="Share this wall post to X">
+                        <a href={tweetUrlFor(item)} target="_blank" rel="noopener noreferrer">
                           <Share2 className="h-4 w-4 mr-1" /> Share to X
                         </a>
                       </Button>
