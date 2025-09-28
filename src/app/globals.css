@@ -1,7 +1,6 @@
 /* src/app/globals.css */
 @import "tailwindcss";
 
-/* Smooth fonts + consistent dark defaults */
 :root { color-scheme: dark; }
 * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 html, body { height: 100%; }
